@@ -13,6 +13,8 @@ namespace BasicBridge;
 namespace PhpBridge;
 
 class BasicBridge {
+    static $lastInstance = null;
+
     protected $target;
     protected $baseUrl = [
         'url' => null
@@ -22,7 +24,13 @@ class BasicBridge {
         return new static($target);
     }
 
+    static function serve($target) {
+        return static::to($target)->interrupt();
+    }
+
     function __construct($target = null) {
+        static::$lastInstance = &$this;
+
         if ($target) {
             $this->setTarget($target);
         }
@@ -120,6 +128,10 @@ JAVASCRIPT;
         return $javascriptClient;
     }
 
+    static function lastOutput($flags = null) {
+        return static::$lastInstance->output($flags);
+    }
+    
     /**
      * Output the bridge in a given format.
      */
