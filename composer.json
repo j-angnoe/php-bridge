@@ -1,6 +1,6 @@
 {
-    "name": "joshua/php-bridge",
-    "description": "PHP Javascript bridge",
+    "name": "j-angnoe/php-bridge",
+    "description": "PHP Javascript bridge for prototypes",
     "license": "MIT",
     "authors": [
         {
@@ -9,7 +9,10 @@
         }
     ],
     "minimum-stability": "dev",
-    "require": {},
+    "bin" : ["bin/harness"],
+    "require": {
+        "php" : ">=7.2"
+    },
     "autoload" : {
         "classmap" : ["src/PhpBridge"]
     }
