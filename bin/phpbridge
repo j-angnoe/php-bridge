@@ -1,0 +1,87 @@
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/autoload.php';
+
+
+define('BROWSER_BIN', 'firefox');
+
+function start_webserver ($path = '.', $opts = []) {
+    $path = realpath($path);
+
+    if (!$path) {
+        throw new Exception('Invalid path given: '. func_get_arg(0));
+    }
+    
+    if (!is_dir('/tmp/phpbridge')) { 
+        mkdir('/tmp/phpbridge', 0777);
+    }
+
+    $read_json = function($file) {
+        return json_decode(file_get_contents($file), 1);
+    };
+
+    $write_json = function($file, $data) {
+        return file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT + JSON_UNESCAPED_SLASHES));
+    };
+
+    $processes = [];
+    if (file_exists("/tmp/phpbridge/processes.json")) { 
+        $processes = $read_json("/tmp/phpbridge/processes.json");
+
+        foreach ($processes as $index => $p) {
+
+            if (($p['args'] ?? []) === [$path, $opts]) {
+                if (file_exists("/proc/" . $p['pid'])) {
+                    $port = $p['port'];
+                    $url = "http://localhost:$port";
+                    system(BROWSER_BIN . " $url/#/ ");
+                    echo "already running at $url\n";
+                    return;
+                } else {
+                    unset($processes[$index]);
+                }
+            }
+        }
+    }
+
+    $port = $opts['port'] ?? rand(31000,32000);
+
+    if ($opts['no-browser'] ?? false) {
+        $openBrowser = function() { };
+    } else {
+        $browserOpts = isset($opts['new-window']) ? '--new-window ' : '';
+        $openBrowser = function() use ($browserOpts, $port) { 
+            system(BROWSER_BIN . " $browserOpts http://localhost:$port/#/ "); 
+        };
+    }
+
+    $processes[] = [
+        'pid' => getmypid(),
+        'args' => [$path, $opts],
+        'created_at' => date('Y-m-d H:i:s'),
+        'port' => $port
+    ];
+    
+    $write_json('/tmp/phpbridge/processes.json', array_values($processes));
+
+    $openBrowser();
+
+    // Ik wil die accepted / closing log berichten kwijt.
+    // maar $pipes = " | grep -v " werkt niet...
+    $pipes = '';
+    $env = '';
+    $dir = is_dir($path) ? $path : dirname($path);
+    system("cd $dir; PHPBRIDGE_PATH=$path $env php -d variables_order=EGPCS -S localhost:$port " . __DIR__ . "/router.php $pipes");
+}
+
+if ($argv[1]) {
+    $opts = [];
+    $optionExtractor = function($match) use (&$opts) { 
+        $opts[$match[1]] = $match[3] ?? true;
+    };
+
+    preg_replace_callback('~--([a-z-0-9]+)(\s*[=\s]\s*(\w+))*~i', $optionExtractor, join(' ',$argv));
+
+    start_webserver($argv[1], $opts);
+}

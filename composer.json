@@ -1,0 +1,16 @@
+{
+    "name": "joshua/php-bridge",
+    "description": "PHP Javascript bridge",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Joshua Angnoe",
+            "email": "joshua@fluxfx.nl"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {},
+    "autoload" : {
+        "classmap" : ["src/PhpBridge"]
+    }
+}

@@ -1,0 +1,6 @@
+vendor
+tmp
+node_modules
+.cache
+cypress/videos
+cypress/screenshots

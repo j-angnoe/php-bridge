@@ -1,0 +1,18 @@
+{
+  "name": "php-bridge",
+  "version": "0.0.1",
+  "description": "PHP Javascript Bridge",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "start" : "php -S localhost:10291 -t examples/",
+    "start:test-cli": "./bin/phpbridge examples/cli/test-file.php --no-browser --port=31890",
+    "start:test-cli2": "./bin/phpbridge examples/cli/ --no-browser --port=31891",
+    "test": "cypress run",
+    "cypress": "cypress open -P ."
+  },
+  "author": "Joshua Angnoe <joshua@fluxfx.nl>",
+  "license": "MIT"
+}
