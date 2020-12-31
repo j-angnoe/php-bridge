@@ -15,10 +15,22 @@ function bridge($target) {
     $instance = PhpBridge\Bridge::to($target);
     $instance->interrupt();
 
-    ob_start(function($chunk) use (&$instance) {
-        return preg_replace_callback('~</head>~', function() use (&$instance) {
-            return $instance->output('script') . '</head>';
-        }, $chunk);
+    $hasOutputted = false;
+    ob_start(function($chunk) use (&$instance, &$hasOutputted) {
+        if (!$hasOutputted) { 
+            $chunk = preg_replace_callback('~</head>~', function() use (&$instance, &$hasOutputted) {
+                $hasOutputted = true;
+                return $instance->output('script') . '</head>';
+            }, $chunk);
+            
+            if (!$hasOutputted) {
+                return $instance->output('script') . $chunk;
+            } else {
+                return $chunk;
+            }
+        } else {
+            return $chunk;
+        }
     });
 }
 

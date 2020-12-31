@@ -3,8 +3,20 @@
 
 require_once __DIR__ . '/autoload.php';
 
-
-define('BROWSER_BIN', 'firefox');
+if (isset($_ENV['BROWSER'])) {
+    define('BROWSER_BIN', $_ENV['BROWSER']);
+} else if (trim(`which firefox`)) {
+    define('BROWSER_BIN', 'firefox');
+} else if (trim(`which chromium`)) {
+    define('BROWSER_BIN', 'chromium');
+} else if (trim(`which chrome`)) {
+    define('BROWSER_BIN', 'chrome');
+} else if (trim(`which xdg-open`)) {
+    define('BROWSER_BIN', 'xdg-open');
+} else {
+    error_log("Could not determine a browser, please specify BROWSER in your environment.");
+    define('BROWSER_BIN', 'echo');
+}
 
 function start_webserver ($path = '.', $opts = []) {
     $path = realpath($path);
@@ -76,12 +88,14 @@ function start_webserver ($path = '.', $opts = []) {
 }
 
 if ($argv[1]) {
+    // @snippet php/cli/options-parser
     $opts = [];
     $optionExtractor = function($match) use (&$opts) { 
         $opts[$match[1]] = $match[3] ?? true;
     };
 
     preg_replace_callback('~--([a-z-0-9]+)(\s*[=\s]\s*(\w+))*~i', $optionExtractor, join(' ',$argv));
+    // @endsnippet
 
     start_webserver($argv[1], $opts);
 }

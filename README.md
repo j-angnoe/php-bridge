@@ -36,7 +36,7 @@ provide the `bridge` function so you can write: It will automatically
 
 
 ```sh
-./bin/phpbridge file.php [--port=1234] [--no-browser]
+./vendor/bin/phpbridge file.php [--port=1234] [--no-browser]
 ```
 
 ```html
@@ -82,7 +82,14 @@ echo $bridge->output('script');
     }
 </script>
 ```
+## Installation
 
+Via composer
+
+```sh
+composer require j-angnoe/php-bridge
+
+```
 
 ## Api
 
