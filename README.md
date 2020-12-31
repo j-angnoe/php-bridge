@@ -32,7 +32,8 @@ spinning up local prototypes.
 
 PhpBridge will launch a webserver on an available port serving the
 file (or directory) you specified. It will autoload PhpBridge and 
-provide the `bridge` function so you can write: 
+provide the `bridge` function so you can write: It will automatically
+
 
 ```sh
 ./bin/phpbridge file.php [--port=1234] [--no-browser]
@@ -85,7 +86,7 @@ echo $bridge->output('script');
 
 ## Api
 
-PhpBridge\Bridge::to($targetClass) - Create an instance and provide it with a target class to create a bridge for.
+PhpBridge\Bridge::to($targetClass) - Create a bridge instance and provide it with a target class (classname or object)
 
 PhpBridge\Bridge::interrupt() - Allow PHP Bridge to interrupt the current script's flow to handle the api calls.
 Call interrupt before starting output.
@@ -99,3 +100,6 @@ to interact with your code via the bridge. In order to benefit from this added l
 you should make sure a php is started prior to calling interrupt.
 
 The javascript client requires a browser to have the `fetch` method. 
+
+## Examples:
+Can be found in ./examples/
