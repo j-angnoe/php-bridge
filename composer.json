@@ -9,7 +9,7 @@
         }
     ],
     "minimum-stability": "dev",
-    "bin" : ["bin/harness"],
+    "bin" : ["bin/phpbridge"],
     "require": {
         "php" : ">=7.2"
     },
