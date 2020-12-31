@@ -102,9 +102,9 @@ PhpBridge\Bridge::output($flags) - Get a copy of the javascript client for your 
 
 ## Features
 
-PhpBridge\Bridge protects calls with a client/csrf method. To is to prevent any non-browser client
+PhpBridge\Bridge protects calls with a client/csrf method. This is to prevent any non-browser client
 to interact with your code via the bridge. In order to benefit from this added layer of security
-you should make sure a php is started prior to calling interrupt.
+you should make sure a php is started prior to calling interrupt. The phpbridge binary does this for you.
 
 The javascript client requires a browser to have the `fetch` method. 
 
