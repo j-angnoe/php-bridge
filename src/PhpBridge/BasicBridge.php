@@ -41,20 +41,6 @@ class BasicBridge {
         return $this;
     }
 
-    /**
-     * The Base Url for the bridge is the url on 
-     * which the mount point lives. 
-     * lives.
-    function setBaseUrl($baseUrl, $baseMethod = 'GET', $baseData = null) {
-        $this->baseUrl = [
-            'url' => $baseUrl,
-            'method' => $baseMethod,
-            'data' => $baseData
-        ];
-        return $this;
-    }
-    */
-
     function generateJavascriptClient($args = null) {
 
         $args = $args ?? "{
@@ -128,20 +114,23 @@ JAVASCRIPT;
         return $javascriptClient;
     }
 
-    static function lastOutput($flags = null) {
-        return static::$lastInstance->output($flags);
-    }
-    
+    protected $outputted = false;
+
     /**
      * Output the bridge in a given format.
      */
     function output($flags = null) {
+        $this->outputted = true;
+
         if (is_string($flags)) {
             $flags = func_get_args();
         }
 
         $output = $this->generateJavascriptClient();
-        
+        // remove line-comments
+        $output = preg_replace('~//[^\n]+~', '', $output);
+        $output = preg_replace('~\s+~', ' ', $output);
+
         if (in_array('script', $flags)) {
             $output = "<script>\n" . $output . "\n</script>";
         }
@@ -153,6 +142,10 @@ JAVASCRIPT;
         }
     }
 
+    function outputted() {
+        return $this->outputted;
+    }
+    
     /**
      * This dispatches and may interrupt the request
      * to output the dispatched output.
@@ -176,6 +169,8 @@ JAVASCRIPT;
             }
 
             if (isset($input) && isset($input['rpc'])) {
+                ob_end_clean();
+
                 if ($callback) {
                     return $callback($input);
                 } else {
@@ -220,38 +215,18 @@ JAVASCRIPT;
         return $result;
     }
 
-    
-    function refreshToken($clientId) {
-        $newToken = $this->random_id();
-        $_SESSION['rpc-clients'][$clientId]['token'] = $newToken;
-        return $newToken;
-    }
-
-    function getClient($clientId) {
-        return $_SESSION['rpc-clients'][$clientId] ?? false;
-    }
-
-    function generateClient() {
-        $clientId = static::random_id();
-        $_SESSION['rpc-clients'][$clientId] = [
-            'id' => $clientId,
-            'created_at' => date('Y-m-d H:i:s'),
-            'last_active_at' => date('Y-m-d H:i:s'),
-            'token' => static::random_id()
-        ];
-        return $_SESSION['rpc-clients'][$clientId];
-    }
-
-    static function random_id() { 
-        return sha1(rand(10000, 99999) . rand(10000, 99999) . rand(10000, 99999) . microtime(true));
-    }
-
     function sendJson($data) {
         header('Content-type: application/json');
         $result = json_encode($data);
         if ($result === false) {
             throw new \Exception('JSON Encoding of result failed: ' . json_last_error_msg() . ' ' . print_r($data, true));
         }
+        // @todo - Maybe exitting isn't always the preferred way
+        // to send our result... (especially when embedded in projects)
         exit($result);
+    }
+
+    static function last() {
+        return static::$lastInstance;
     }
 }
