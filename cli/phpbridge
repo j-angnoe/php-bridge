@@ -18,6 +18,7 @@ if (isset($_ENV['BROWSER'])) {
     define('BROWSER_BIN', 'echo');
 }
 
+
 function start_webserver ($path = '.', $opts = []) {
     
     $debug = function ($message) use ($opts) {
@@ -71,7 +72,37 @@ function start_webserver ($path = '.', $opts = []) {
         }
     }
 
-    $port = $opts['port'] ?? rand(31000,32000);
+    $getPortProcess = function ($port) {
+        $line = trim(`fuser $port/tcp 2>/dev/null`);
+        return $line;
+    };
+
+    if (!isset($opts['port'])) {
+        // pick a free port 
+        $count = 0;
+        while(true) {
+            $count++;
+            $tryPort = rand(31000, 32000);
+            if (!$getPortProcess($tryPort)) {
+                $port = $tryPort;
+                break;
+            }
+            if ($count > 10) {
+                echo "Could not find a free port betwen 31000 and 32000.\n";
+                echo "Tried 10 times already, giving up now.\n";
+                echo "Free up some ports and try again.\n";
+                exit(1);
+            }
+        }
+    } else {
+        if ($ownerPid = $getPortProcess($opts['port'])) { 
+            echo "You requested to use port {$opts['port']}\n";
+            echo "This port is already in use by process with pid {$ownerPid}\n";
+            echo "Free up this port or choose another port to run on.\n";
+            exit(1);
+        }
+        $port = $opts['port'];
+    }
 
     $debug("Intending to run on port $port");
 
@@ -150,7 +181,7 @@ function start_webserver ($path = '.', $opts = []) {
     $debug("Environment variables supplied:\n\t");
     $debug($env);
 
-    $command = "php -d variables_order=EGPCS -S localhost:$port " . __DIR__ . "/router2.php";
+    $command = "php -d variables_order=EGPCS -S localhost:$port " . __DIR__ . "/router.php";
     chdir($dir);
     $descriptors = [['file', '/dev/null','r'],['pipe','w'], STDERR];
     $handle = proc_open($command, $descriptors, $proc_pipes, $dir, $env);
