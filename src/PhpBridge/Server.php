@@ -101,6 +101,10 @@ class Server {
                 $content = Bridge::last()->output('script') . "\n" . $content;
             }
         }
+
+        if ($this->baseUrl) {
+            $content = Utils::inject('head', '<base href="'.rtrim($this->baseUrl,'/').'/">', $content);
+        }
     
         // Output the content.
         echo $content;
@@ -109,12 +113,14 @@ class Server {
     
     function dispatch($url = null) {
         $url = $_SERVER['REQUEST_URI'];
+
         if ($this->baseUrl) {
-            $url = preg_replace('/^' . preg_quote($this->baseUrl).'/', '', $url, 1);
+            $url = preg_replace($x='~^' . preg_quote($this->baseUrl.'/').'~', '', $url, 1);
         }
+
         // url can also contain a query-string, we should strip this out.
         $url = parse_url($url, PHP_URL_PATH);
-
+        
         $index = ['index.php','index.html'];
 
         $pathDir = $this->path;
@@ -132,6 +138,7 @@ class Server {
         }
         
         foreach ($tryUrls as $url) {
+
             if (file_exists($pathDir . '/' . $url)) {
                 $extension = pathinfo($url, PATHINFO_EXTENSION);
                 if (in_array($extension, $handleExtensions)) {
@@ -139,6 +146,7 @@ class Server {
                     return true;
                 } else {
                     // let php handle this.
+                    $this->serveFile($pathDir . '/'. $url);
                     return false;
                 }
             }
