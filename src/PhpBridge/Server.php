@@ -59,7 +59,7 @@ class Server {
         // Bootstrap all layers (including current)
         $cwd = is_file($this->path) ? dirname($this->path) : $this->path;
 
-        $directories = array_unique([$cwd, dirname($file), ...$this->getLayers()]);
+        $directories = array_merge([$cwd, dirname($file)], $this->getLayers());
     
         foreach ($directories as $d) {
             if (file_exists("$d/vendor/autoload.php")) {
@@ -115,7 +115,9 @@ class Server {
         $url = $_SERVER['REQUEST_URI'];
 
         if ($this->baseUrl) {
-            $url = preg_replace($x='~^' . preg_quote($this->baseUrl.'/').'~', '', $url, 1);
+            // Use case:
+            // /htools/vue-conv should work, but /htools/vue-conv/ should also work.
+            $url = preg_replace($x='~^' . preg_quote($this->baseUrl).'~', '', $url, 1);
         }
 
         // url can also contain a query-string, we should strip this out.
