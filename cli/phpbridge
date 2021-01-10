@@ -263,12 +263,17 @@ function runScript($argv) {
     }
 }
 
-function createPack() {
+function createPack($args) {
+    
     if (file_exists('package.json')) {
         $package = read_json('package.json');
 
-        $target_dir = dirname(getcwd()) .'/' . basename(getcwd()) . '-package';
-
+        if ($args[0] === '--to') {
+            $target_dir = realpath($args[1]);
+        } else { 
+            $target_dir = dirname(getcwd()) .'/' . basename(getcwd()) . '-package';
+        }
+        
         if (!$target_dir) {
             echo ("target dir is invalid");
             exit(1);
@@ -339,11 +344,10 @@ if (empty($opts)) {
                 return runScript(array_slice($argv, 2));
             break;
 
+            case 'publish':
             case 'pack':
                 // prepare for distribution
-
-                return createPack();
-
+                return createPack(array_slice($argv, 2));
 
             case 'h':
             case 'help':
