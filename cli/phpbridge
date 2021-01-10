@@ -1,0 +1,379 @@
+#!/usr/bin/env php
+<?php
+
+require_once __DIR__ . '/autoload.php';
+
+if (isset($_ENV['BROWSER'])) {
+    define('BROWSER_BIN', $_ENV['BROWSER']);
+} else if (trim(`which firefox`)) {
+    define('BROWSER_BIN', 'firefox');
+} else if (trim(`which chromium`)) {
+    define('BROWSER_BIN', 'chromium');
+} else if (trim(`which chrome`)) {
+    define('BROWSER_BIN', 'chrome');
+} else if (trim(`which xdg-open`)) {
+    define('BROWSER_BIN', 'xdg-open');
+} else {
+    error_log("Could not determine a browser, please specify BROWSER in your environment.");
+    define('BROWSER_BIN', 'echo');
+}
+
+function start_webserver ($path = '.', $opts = []) {
+    
+    $debug = function ($message) use ($opts) {
+        if (!isset($opts['debug'])) return;
+        if (is_string($message)) {
+            error_log("[debug] " . $message);
+        } else {
+            error_log("[debug] " . print_r($message, true));
+        }
+    };
+
+    $debug($opts);
+
+    $path = realpath($path);
+
+    if (!$path) {
+        throw new Exception('Invalid path given: '. func_get_arg(0));
+    }
+    
+    if (!is_dir('/tmp/phpbridge')) { 
+        mkdir('/tmp/phpbridge', 0777);
+    }
+
+    $read_json = function($file) {
+        return json_decode(file_get_contents($file), 1);
+    };
+
+    $write_json = function($file, $data) {
+        return file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT + JSON_UNESCAPED_SLASHES));
+    };
+
+    $processes = [];
+    if (file_exists("/tmp/phpbridge/processes.json")) { 
+        $processes = $read_json("/tmp/phpbridge/processes.json");
+
+        foreach ($processes as $index => $p) {
+
+            if (($p['args'] ?? []) === [$path, $opts]) {
+                if (file_exists("/proc/" . $p['pid'])) {
+                    $port = $p['port'];
+                    $url = "http://localhost:$port";
+                    if (!isset($opts['no-browser'])) { 
+                        system(BROWSER_BIN . " $url/#/ ");
+                    }
+                    echo "already running at $url with pid {$p['pid']}\n";
+                    return;
+                } else {
+                    unset($processes[$index]);
+                }
+            }
+        }
+    }
+
+    $port = $opts['port'] ?? rand(31000,32000);
+
+    $debug("Intending to run on port $port");
+
+    if (isset($opts['no-browser'])) {
+        $openBrowser = function() { };
+    } else {
+        $debug("Using BROWSER_BIN " . BROWSER_BIN);
+
+        $browserOpts = isset($opts['new-window']) ? '--new-window ' : '';
+        $openBrowser = function() use ($browserOpts, $port) { 
+            system(BROWSER_BIN . " $browserOpts http://localhost:$port/#/ "); 
+        };
+    }
+
+    $processes[] = [
+        'pid' => getmypid(),
+        'args' => [$path, $opts],
+        'created_at' => date('Y-m-d H:i:s'),
+        'port' => $port
+    ];
+    
+    $write_json('/tmp/phpbridge/processes.json', array_values($processes));
+
+
+    // Ik wil die accepted / closing log berichten kwijt.
+    // maar $pipes = " | grep -v " werkt niet...
+    $pipes = '';
+    $env = [];
+    $env["PHPBRIDGE_PATH"] = $path;
+
+    // You supply layers via commandline options OR the package.json will be read.
+    $layers = [];
+    if ($opts['layer'] ?? false) {
+        $layers = is_array($opts['layer']) ? $opts['layer'] : [$opts['layer']];
+    } else if (file_exists("$path/package.json")) {
+        $data = json_decode(file_get_contents("$path/package.json"), 1);
+        $layers = $data['layers'] ?? [];
+    }
+
+    if (is_array($layers)) {
+        $LAYERS_DIR = $_ENV['PHPBRIDGE_LAYERS_DIR'] ?? false;
+        foreach ($layers as $idx=>$l) { 
+            if (strpos($l, '/') === 0) {
+                if (!realpath($l)) {
+                    error_log("Layer `$l` was requested but this folder does not exist.");
+                    exit(1);
+                }
+                $layers[$idx] = realpath($l);
+            } else {
+                if (is_dir($path . '/_layers/' . $l)) {
+                    $layers[$idx] = realpath($path . '/_layers/' . $l);
+                    continue;
+                }
+
+                if (!$LAYERS_DIR || !realpath($LAYERS_DIR . $l)) {
+                    error_log("Layer `$l` was not found (" . ($LAYERS_DIR ?: 'no layers dir').").");
+                    exit(1);
+                }
+                $layers[$idx] = realpath($LAYERS_DIR . $l);
+            }
+        }
+    }
+
+    $env["PHPBRIDGE_LAYER"] = join(',',$layers);
+    
+
+    if ($opts['class'] ?? false) {
+        $env["PHPBRIDGE_CLASS"] = $opts['class'];
+    }
+
+    $dir = is_dir($path) ? $path : dirname($path);
+
+    $openBrowser();
+
+    $debug("Working directory will be $dir");
+    $debug("Environment variables supplied:\n\t");
+    $debug($env);
+
+    $command = "php -d variables_order=EGPCS -S localhost:$port " . __DIR__ . "/router2.php";
+    chdir($dir);
+    $descriptors = [['file', '/dev/null','r'],['pipe','w'], STDERR];
+    $handle = proc_open($command, $descriptors, $proc_pipes, $dir, $env);
+    while(fgets($proc_pipes[1])) {
+    }
+    pclose($handle);
+}
+
+function showHelp() {
+    $package = read_json(__DIR__ . '/../package.json');
+
+    echo <<<USAGE
+
+phpbridge-cli v{$package['version']}
+-------------------------
+
+Starts a php webserver on a free port for your php/html/javascript prototypes.
+
+Usage: phpbridge [fileOrFolder] 
+
+Available options:
+    -f, --file      specify which folder / file to mount. If ommitted the first argument will be interpretted as file.
+    -l, --layer     declare which extra layers must be rendered, you may define multiple layers
+    --class         declare which php object must be automatically bridged.
+    -p, --port      manually specify which port to start the webserver on.
+    --debug         enable debug mode
+    --no-browser    don't open a new browser tab on start.
+    --help          display usage information
+
+To further adopt phpbridge to your environment you may configure
+these environment variables:
+PHPBRIDGE_LAYERS_DIR    the directory which contains all your layers
+BROWSER_BIN             defines the path to your browser binary (default: firefox)
+
+
+USAGE;
+
+echo "\n";
+}
+
+function read_json($file) {
+    return json_decode(file_get_contents($file), 1);
+}
+
+function getLayersDir($error = true) {
+    $dir = false;
+    if (isset($_ENV['PHPBRIDGE_LAYERS_DIR'])) {
+        $dir = $_ENV['PHPBRIDGE_LAYERS_DIR'];
+    }
+    
+    if ((!$dir || realpath($dir)) && $error) {
+        if ($dir) {
+            if (!realpath($dir)) {
+                error_log("Layers directory was configured ($dir) but this is not accessible from current directory (" . getcwd() . "), fix this by making PHPBRIDGE_LAYERS_DIR an absolute path.");
+            }
+        } else {
+            error_log('No layers directory configured, please configure PHPBRIDGE_LAYERS_DIR in PATH');
+        }
+    }
+    return $dir;
+}
+
+function getLayerDir($l) {
+    $LAYERS_DIR = getLayersDir();
+    if (strpos($l, '/') === 0) {
+        if (!realpath($l)) {
+            return false;
+        }
+        return realpath($l);
+    } else {
+        if (!$LAYERS_DIR || !realpath($LAYERS_DIR . $l)) {
+            return false;
+        }
+        return realpath($LAYERS_DIR . $l);
+    }
+}
+
+function runScript($argv) {    
+    
+    if (file_exists('package.json')) {
+        $package = read_json('package.json');
+
+        $LAYERS_DIR = getLayersDir();
+
+        $script = $argv[0];
+        $rest = join(" ", array_slice($argv, 1));
+        $run = function($command) use ($rest) {
+            echo "Running command `$command $rest`\n";
+            system("$command $rest");
+        };
+
+        if (isset($package['scripts'][$script])) {
+            echo "Found `$script` in current directory.\n";
+            $run($package['scripts'][$script]);
+        }
+
+        foreach ($package['layers'] as $l) {
+            if (!is_dir($LAYERS_DIR . '/' . $l)) {
+                error_log("Layer `$l` was not found in $LAYERS_DIR");
+            } else if (file_exists("$LAYERS_DIR/$l/package.json")) {
+                $lpack = read_json("$LAYERS_DIR/$l/package.json");
+                echo "Found `$script` in $l\n";
+                $run($lpack['scripts'][$script]);
+            }
+        }
+    } else {
+
+        error_log('no package.json to be found.');
+        exit(1);
+    }
+}
+
+function createPack() {
+    if (file_exists('package.json')) {
+        $package = read_json('package.json');
+
+        $target_dir = dirname(getcwd()) .'/' . basename(getcwd()) . '-package';
+
+        if (!$target_dir) {
+            echo ("target dir is invalid");
+            exit(1);
+        }
+        `rm -rf $target_dir`;
+
+        echo "Outputting packaged build to $target_dir\n";
+
+        @mkdir($target_dir, 0777, true);
+
+        $command = function($command) { return array_filter(explode("\n", trim(shell_exec($command)))); };
+
+        foreach ($command('fd .') as $file) {
+            if (is_dir($file)) {
+                @mkdir($target_dir . '/' . $file, 0777, true);
+            } else {
+                copy($file, $target_dir . '/' . $file);
+            }
+        }
+        
+        $cwd = getcwd();
+        foreach ($package['layers'] as $l) {
+            
+            $target_layer_dir = $target_dir . '/_layers/' . $l;
+            if (!is_dir($target_layer_dir)) {
+                mkdir($target_layer_dir, 0777, true);
+            }
+
+            $dir = getLayerDir($l);
+            
+            chdir($dir);
+            foreach ($command("fd .") as $file) {
+                if (is_dir($file)) {
+                    @mkdir($target_layer_dir . '/' . $file, 0777, true);
+                } else {
+                    copy($file, $target_layer_dir. '/' . $file);
+                }
+            }
+            chdir($cwd);
+            echo $dir;
+        }
+        chdir($cwd);
+        
+        echo "Created package in $target_dir\n";
+        echo `du -hs $target_dir`;
+    } else {
+        error_log('no package.json to be found.');
+        exit(1);
+    }
+}
+$opts = getopt("f:l:p:", [
+    'file:',
+    'layer:',
+    'class:',
+    'port:',
+    'debug',
+    'no-browser',
+    'help'
+]);
+$shortToLong = ['f' => 'file', 'l' => 'layer', 'p' => 'port'];
+
+if (empty($opts)) { 
+    if (isset($argv[1])) { 
+        switch($argv[1]) {
+            case 'run':
+                // Run an npm script in current directory or one of the layers.
+
+                return runScript(array_slice($argv, 2));
+            break;
+
+            case 'pack':
+                // prepare for distribution
+
+                return createPack();
+
+
+            case 'h':
+            case 'help':
+            case '-h':
+            case '--help':
+            case '-?': 
+                return showHelp();
+            default: 
+                // relaunch the command assume first is argument is f
+                $rewrittenCommand = $argv[0] . ' --file ' . join(' ', array_slice($argv, 1));
+                return system($rewrittenCommand);
+        }
+    } else {
+        return showHelp();
+    }
+} else {
+    foreach ($shortToLong as $short=>$long) {
+        if (isset($opts[$short]) && !isset($opts[$long])) {
+            $opts[$long] = $opts[$short];
+        }
+    }
+}
+
+if (isset($opts['help'])) {
+    return showHelp();
+}
+
+// translate short opts to long opts
+
+
+if (isset($opts['file'])) {
+    start_webserver($opts['file'], $opts);
+}
