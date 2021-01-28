@@ -15,14 +15,24 @@ class Bridge extends BasicBridge {
     function generateJavascriptClient($args = null) {
         $client = $this->generateClient();
 
+        // @todo - There is no support for parallell request (yet)
+    
         $args = $args ?? "{
             postMethod: (function() {
                 var token = \"{$client['token']}\";
                 var clientId = \"{$client['id']}\";
                 
-                return (url, data) => {
+                window.requestStack = [];
+
+                return async (url, data) => {
                     data.client = clientId;
-                    data.token = token;
+                    
+                    var _tmp = token;
+                    var resolveToken;
+                    token = new Promise(resolve => {
+                        resolveToken = resolve;
+                    });
+                    data.token = await Promise.resolve(_tmp);
 
                     return fetch(url, {
                         method: 'POST',
@@ -30,15 +40,23 @@ class Bridge extends BasicBridge {
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(data)
-                    }).then(response => {
+                    })
+                    .then(response => {
                         return response.json().then(data => {
                             if (data && data['rpc-next-token']) {
-                                token = data['rpc-next-token'];
+                                resolveToken(data['rpc-next-token']);
                             }
                             response.data = data;
                             return response
-                        });  
-                    });
+                        }, error => {
+                            if (response.headers.get('Next-Token')) {
+                                resolveToken(response.headers.get('Next-Token'));
+                            } else {                                 
+                                alert('Security chain broken by unparsable json. Please reload the page.');
+                            }
+                            throw error;
+                        });
+                    })
                 } 
             })(),
             baseUrl: \"{$this->baseUrl['url']}\"
@@ -67,11 +85,14 @@ class Bridge extends BasicBridge {
             if ($callback) {
                 return $callback($input);
             } else { 
+                $token = $this->refreshToken($client['id']);
+                header("Next-Token: $token");
+
                 $responseData = $this->dispatch($input['rpc']);
 
                 $this->sendJson([
                     'rpc-data' => $responseData,
-                    'rpc-next-token' => $this->refreshToken($client['id'])
+                    'rpc-next-token' => $token
                 ]);
                 exit;
             }
