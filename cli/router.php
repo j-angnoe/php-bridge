@@ -31,6 +31,8 @@ $layers = array_filter(array_map('trim', explode(',', $_ENV['PHPBRIDGE_LAYER'] ?
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
 $server = new Server($_ENV['PHPBRIDGE_PATH']);
+$server->setBaseUrl('/');
+
 if (!empty($layers)) { 
     $server->setLayers($layers);
 }
