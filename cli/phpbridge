@@ -131,6 +131,14 @@ function start_webserver ($path = '.', $opts = []) {
     // maar $pipes = " | grep -v " werkt niet...
     $pipes = '';
     $env = [];
+    
+    if (isset($opts['env'])) {
+        foreach ( is_array($opts['env']) ? $opts['env'] : [$opts['env']] as $row) {
+            list($key, $value) = explode('=', $row, 2);
+            $env[$key] = $value;
+        }
+    }
+
     $env["PHPBRIDGE_PATH"] = $path;
 
     // You supply layers via commandline options OR the package.json will be read.
@@ -184,7 +192,7 @@ function start_webserver ($path = '.', $opts = []) {
     $command = "php -d variables_order=EGPCS -S localhost:$port " . __DIR__ . "/router.php";
     chdir($dir);
     $descriptors = [['file', '/dev/null','r'],['pipe','w'], STDERR];
-    $handle = proc_open($command, $descriptors, $proc_pipes, $dir, $env);
+    $handle = proc_open($command, $descriptors, $proc_pipes, $dir, array_merge($_ENV, $env));
     while(fgets($proc_pipes[1])) {
     }
     pclose($handle);
@@ -362,7 +370,8 @@ $opts = getopt("f:l:p:", [
     'port:',
     'debug',
     'no-browser',
-    'help'
+    'help',
+    'env:'
 ]);
 $shortToLong = ['f' => 'file', 'l' => 'layer', 'p' => 'port'];
 
