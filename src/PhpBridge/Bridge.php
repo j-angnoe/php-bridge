@@ -53,6 +53,14 @@ class Bridge extends BasicBridge {
                                 resolveToken(response.headers.get('Next-Token'));
                             } else {                                 
                                 alert('Security chain broken by unparsable json. Please reload the page.');
+                                
+                                fetch(url, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({ rescue: `Javascript error: \${error}` })
+                                }).then(response => resolveToken(response.headers.get('Next-Token')))
                             }
                             throw error;
                         });
@@ -72,6 +80,16 @@ class Bridge extends BasicBridge {
     function interrupt($callback = null) {
         return parent::interrupt(function ($input) use ($callback) { 
             $client = $this->getClient($input['client']);
+
+            if (isset($input['rescue'])) {
+                error_log('Repair security chain, reason: ' . $input['rescue']);
+                $token = $this->refreshToken($client['id']);
+                header("Next-Token: $token");
+                return $this->sendJson([
+                    'ok' => true
+                ]);
+            }
+
             if (!$client) {
                 header('HTTP/1.1 403 Forbidden, invalid client');
                 exit;

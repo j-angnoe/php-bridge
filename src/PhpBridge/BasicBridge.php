@@ -152,7 +152,7 @@ JAVASCRIPT;
      */
     function interrupt($callback = null) {
         if ($_SERVER["REQUEST_METHOD"] == "POST") {
-            if (strpos($_SERVER['HTTP_CONTENT_TYPE'],'application/json') !== false) {
+            if (strpos($_SERVER['HTTP_CONTENT_TYPE'] ?? '','application/json') !== false) {
                 $input = file_get_contents('php://input');
                 if (strpos($input, "rpc") !== false) {
                     $input = json_decode($input, 1);
@@ -187,6 +187,21 @@ JAVASCRIPT;
     }
 
     function getTarget($identifier = null) {
+        if (is_array($this->target) && count($this->target) > 1) {
+            foreach ($this->target as $target) { 
+                $target_classname = is_object($target) ? get_class($target) : $target;
+
+                if (stripos(strrev($target_classname), strrev($identifier)) === 0 ||
+                    stripos(strrev($target_classname), strrev($identifier.'controller')) === 0
+                ) {
+                    if (is_object($target)) {
+                        return $target;
+                    } else {
+                        return new $target;
+                    }
+                }
+            }
+        }
         if (is_string($this->target) && class_exists($this->target)) {
             return new $this->target;
         } else {
