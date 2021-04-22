@@ -66,7 +66,9 @@ class BasicBridge {
         (function(exports, options) {
             // define default options: 
             options = Object.assign({
-                processResponse: response => response.data['rpc-data'],
+                processResponse: response => {
+                    return response.data['rpc-data'] || { error: response.data.error || response.data };
+                },
             }, options || {});
 
             
