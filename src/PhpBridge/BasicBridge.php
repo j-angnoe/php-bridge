@@ -152,7 +152,15 @@ JAVASCRIPT;
      */
     function interrupt($callback = null) {
         if ($_SERVER["REQUEST_METHOD"] == "POST") {
-            if (strpos($_SERVER['HTTP_CONTENT_TYPE'] ?? '','application/json') !== false) {
+            $contentType = '';
+            
+            if (isset($_SERVER['HTTP_CONTENT_TYPE'])) {
+                $contentType = $_SERVER['HTTP_CONTENT_TYPE'];
+             } elseif (isset($_SERVER['CONTENT_TYPE'])) {
+                 $contentType = $_SERVER['CONTENT_TYPE'];
+             }
+
+            if (strpos($contentType, 'application/json') !== false) {
                 $input = file_get_contents('php://input');
                 if (strpos($input, "rpc") !== false) {
                     $input = json_decode($input, 1);
