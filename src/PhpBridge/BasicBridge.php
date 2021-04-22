@@ -48,7 +48,8 @@ class BasicBridge {
                 return fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify(data)
                 }).then(response => {
@@ -153,7 +154,7 @@ JAVASCRIPT;
     function interrupt($callback = null) {
         if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $contentType = '';
-            
+
             if (isset($_SERVER['HTTP_CONTENT_TYPE'])) {
                 $contentType = $_SERVER['HTTP_CONTENT_TYPE'];
              } elseif (isset($_SERVER['CONTENT_TYPE'])) {

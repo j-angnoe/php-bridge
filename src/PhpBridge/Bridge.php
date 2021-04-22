@@ -37,7 +37,8 @@ class Bridge extends BasicBridge {
                     return fetch(url, {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            'Accept' : 'application/json'
                         },
                         body: JSON.stringify(data)
                     })
@@ -57,7 +58,8 @@ class Bridge extends BasicBridge {
                                 fetch(url, {
                                     method: 'POST',
                                     headers: {
-                                        'Content-Type': 'application/json'
+                                        'Content-Type': 'application/json',
+                                        'Accept' : 'application/json'
                                     },
                                     body: JSON.stringify({ rescue: `Javascript error: \${error}` })
                                 }).then(response => resolveToken(response.headers.get('Next-Token')))
