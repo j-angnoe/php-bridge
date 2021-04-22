@@ -46,6 +46,10 @@ class Bridge extends BasicBridge {
                         return response.json().then(data => {
                             if (data && data['rpc-next-token']) {
                                 resolveToken(data['rpc-next-token']);
+                            } else if (response.headers.get('Next-Token')) {
+                                resolveToken(response.headers.get('Next-Token'));
+                            } else {
+                                throw new Exception('Couldnt acquire next-token.');
                             }
                             response.data = data;
                             return response
