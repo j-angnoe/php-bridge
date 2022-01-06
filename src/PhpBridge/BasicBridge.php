@@ -91,16 +91,11 @@ class BasicBridge {
 
             var { postMethod, baseUrl, processResponse } = options;
 
-<<<<<<< HEAD
             var exportAs = $exportTargets;
             console.log('export as', exportAs);
 
             if (!baseUrl) {
                 baseUrl = $currentUrl.split(/#/)[0];
-=======
-            if (!baseUrl) {
-                baseUrl = window.location.href.split(/#/)[0];
->>>>>>> 7b8058261461d83cbf9751ca7e0183a1d3a8292a
 
                 if (~baseUrl.indexOf('?')) {
                     baseUrl += '&';
@@ -118,21 +113,11 @@ class BasicBridge {
                 ).then(processResponse);
             };
 
-<<<<<<< HEAD
             if (exportAs) {
                 exports.api = exports.api || {};
                 for (var name in exportAs) {
                     (function (name) {
                         exports.api[name] = new Proxy({}, {
-=======
-            exports.api = new Proxy({},{
-                get(obj, apiName) {
-                    return new Proxy(
-                        function (...args) {
-                            return call('\main', apiName, args)
-                        },
-                        {
->>>>>>> 7b8058261461d83cbf9751ca7e0183a1d3a8292a
                             get(obj, functionName) {
                                 return function (...args) {
                                     return call(exportAs[name], functionName, args);
