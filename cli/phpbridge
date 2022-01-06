@@ -404,6 +404,8 @@ if (empty($opts)) {
         return showHelp();
     }
 } else {
+    // translate short opts to long opts
+
     foreach ($shortToLong as $short=>$long) {
         if (isset($opts[$short]) && !isset($opts[$long])) {
             $opts[$long] = $opts[$short];
@@ -415,7 +417,6 @@ if (isset($opts['help'])) {
     return showHelp();
 }
 
-// translate short opts to long opts
 
 
 if (isset($opts['file'])) {

@@ -3,7 +3,7 @@
 namespace BasicBridge;
 
 /**
- * This is a basic unprotected unsafe bridge. 
+ * This is a basic unprotected unsafe bridge.
  * It does not have CRSF protection
  * Only use this bridge if you know what you are doing.
  * It's highly recommended to use the normal bridge.
@@ -56,28 +56,46 @@ class BasicBridge {
                     return response.json().then(data => {
                         response.data = data;
                         return response
-                    });  
+                    });
                 });
             },
             baseUrl: \"{$this->baseUrl['url']}\"
         }";
 
+        $aliasedTargets = false;
+
+        if (is_array($this->target)) {
+            $aliasedTargets = [];
+            foreach ($this->target as $n => $target) {
+                if (is_numeric($n)) {
+                    list($class) = explode('\\', strrev($target));
+                    $aliasedTargets[$class] = $target;
+                } else {
+                    $aliasedTargets[$n] = $target;
+                }
+            }
+        }
+
+        $exportTargets = json_encode($aliasedTargets);
+        $currentUrl = json_encode($_SERVER['REQUEST_URI']);
+
         $javascriptClient = <<<JAVASCRIPT
         (function(exports, options) {
-            // define default options: 
+            // define default options:
             options = Object.assign({
                 processResponse: response => {
                     return response.data['rpc-data'] || { error: response.data.error || response.data };
                 },
             }, options || {});
 
-            
+
             var { postMethod, baseUrl, processResponse } = options;
 
-            if (!baseUrl) { 
-                var anchor = document.createElement('a');
-                anchor.href = '#';
-                baseUrl = anchor.href.substr(0, anchor.href.length - 1);
+            var exportAs = $exportTargets;
+            console.log('export as', exportAs);
+
+            if (!baseUrl) {
+                baseUrl = $currentUrl.split(/#/)[0];
 
                 if (~baseUrl.indexOf('?')) {
                     baseUrl += '&';
@@ -88,29 +106,44 @@ class BasicBridge {
 
             var call = (apiName, functionName, data) => {
                 return postMethod(
-                    baseUrl + "api/" + apiName + "/" + functionName, 
-                    { 
+                    baseUrl + "api/" + apiName + "/" + functionName,
+                    {
                         rpc: [apiName, functionName, data]
                     }
                 ).then(processResponse);
             };
 
-            exports.api = new Proxy({},{
-                get(obj, apiName) {
-                    return new Proxy(
-                        function (...args) { 
-                            return call('\main', apiName, args)
-                        },
-                        {
+            if (exportAs) {
+                exports.api = exports.api || {};
+                for (var name in exportAs) {
+                    (function (name) {
+                        exports.api[name] = new Proxy({}, {
                             get(obj, functionName) {
                                 return function (...args) {
-                                    return call(apiName, functionName, args);
+                                    return call(exportAs[name], functionName, args);
                                 };
                             }
-                        }
-                    );
+                        });
+                    })(name);
                 }
-            });
+            } else {
+                exports.api = new Proxy({},{
+                    get(obj, apiName) {
+                        return new Proxy(
+                            function (...args) {
+                                return call('\main', apiName, args)
+                            },
+                            {
+                                get(obj, functionName) {
+                                    return function (...args) {
+                                        return call(apiName, functionName, args);
+                                    };
+                                }
+                            }
+                        );
+                    }
+                });
+            }
         })(window, $args)
 JAVASCRIPT;
 
@@ -148,7 +181,7 @@ JAVASCRIPT;
     function outputted() {
         return $this->outputted;
     }
-    
+
     /**
      * This dispatches and may interrupt the request
      * to output the dispatched output.
@@ -198,8 +231,11 @@ JAVASCRIPT;
     }
 
     function getTarget($identifier = null) {
-        if (is_array($this->target) && count($this->target) > 1) {
-            foreach ($this->target as $target) { 
+        if (is_array($this->target) && count($this->target) > 0) {
+            foreach ($this->target as $targetId => $target) {
+                if (!is_numeric($targetId) && strtolower($targetId) === strtolower($identifier)) {
+                    return $target;
+                }
                 $target_classname = is_object($target) ? get_class($target) : $target;
 
                 if (stripos(strrev($target_classname), strrev($identifier)) === 0 ||
@@ -220,10 +256,12 @@ JAVASCRIPT;
         }
     }
 
-    function dispatch($command) { 
+    function dispatch($command) {
         list($object, $method, $args) = $command;
-        
+
         $controller = $this->getTarget($object);
+
+        // dd($controller);
 
         if (method_exists($controller, $method)) {
             $result = call_user_func_array([$controller, $method], $args);
