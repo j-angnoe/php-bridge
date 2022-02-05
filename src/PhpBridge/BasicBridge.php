@@ -84,7 +84,14 @@ class BasicBridge {
             // define default options:
             options = Object.assign({
                 processResponse: response => {
+                  if ((response.status+'').substr(0,1) < '4') {
                     return response.data['rpc-data'] || { error: response.data.error || response.data };
+                  } else {
+                    var error = new Error(response?.data?.error?.message || response?.data?.error || response?.data?.message || response.statusText);
+                    error.data = response.data;
+                    error.response = response;
+                    throw error;
+                  }
                 },
             }, options || {});
 
