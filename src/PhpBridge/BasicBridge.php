@@ -15,12 +15,18 @@ namespace PhpBridge;
 class BasicBridge {
     static $lastInstance = null;
 
+    static $intercepts = [];
+    static $buffer = '';
+
     protected $target;
     protected $baseUrl = [
         'url' => null
     ];
 
     static function to($target) {
+        if (isset(static::$intercepts[__FUNCTION__])) {
+            return call_user_func(static::$intercepts[__FUNCTION__], $target);
+        }
         return new static($target);
     }
 
@@ -38,6 +44,57 @@ class BasicBridge {
 
     function setTarget($target) {
         $this->target = $target;
+        return $this;
+    }
+
+    /**
+     * Allows one harness file to also load other harness files 
+     * without interupting the flow.
+     * 
+     * The `interrupt()` calls within the loaded files will be ignored.
+     * By default the components defined in the harness file will be outputted
+     * unless you supply $keepContent = false
+     */
+    function include($source, $keepContent = true) { 
+        if (is_string($source)) { 
+            $source = function () use ($source) { 
+                include_once $source;
+            };
+        }
+
+        ob_start();
+        $self = $this;
+        static::$intercepts['to'] = function ($target) use (&$self) { 
+            $self->target = array_merge($self->target, $target);
+            return new class { 
+                // handles nested includes.
+                function include($source) { 
+                    if (is_string($source)) { 
+                        $source = function () use ($source) { 
+                            include_once $source;
+                        };
+                    }           
+                    $source();
+                }
+                function interrupt() { 
+                    // no-op
+                }
+            };
+        };
+        $source();
+        static::$intercepts = [];
+        
+        $keep = ob_get_clean();
+
+        if ($keepContent) { 
+            if ($keepContent === 'components') { 
+                $keep = preg_replace('~(<template\s)([^>]*)url~i', '$1$2 disabled-url', $keep);
+            }
+        } else { 
+            $keep = false;
+        }
+        static::$buffer = $keep;
+
         return $this;
     }
 
@@ -194,6 +251,10 @@ JAVASCRIPT;
      * to output the dispatched output.
      */
     function interrupt($callback = null) {
+        if (isset(static::$intercepts[__FUNCTION__])) {
+            return call_user_func(static::$intercepts[__FUNCTION__], $callback);
+        }
+
         if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $contentType = '';
 
@@ -234,6 +295,9 @@ JAVASCRIPT;
                 }
             }
         }
+
+        echo static::$buffer;
+
         return $this;
     }
 
