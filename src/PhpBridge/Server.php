@@ -4,13 +4,30 @@
 // contains a phpbridge project and mount it on the url supplied to mount.
 namespace PhpBridge;
 
-use PhpBridge\Bridge;
 use PhpBridge\Utils;
+use Closure;
 
+require_once(__DIR__ . '/applet-includes.php');
 class Server {
-    var $path;
-    var $baseUrl;
-    var $layers;
+    protected $path;
+    protected $baseUrl;
+    protected $layers = [];
+    protected $macros = [];
+
+    function macro($method, callable $implementation) {
+        $this->macros[$method] = $implementation;
+    }
+    function __call($method, $args) { 
+        if (isset($this->macros[$method])) { 
+            $fn = $this->macros[$method];
+            if ($fn instanceof Closure) {
+                $fn = $fn->bindTo($this);
+            }
+            return call_user_func_array($fn, $args);
+        } else {
+            throw new \Exception(sprintf('Call to undefined method `%s::%s`', __CLASS__, $method));
+        }
+    }
 
     function __construct($path = null, $baseUrl = null) {
         if ($path) {
@@ -20,99 +37,196 @@ class Server {
         if ($baseUrl) {
             $this->setBaseUrl($baseUrl);
         }
-        
     }
 
+    function fileExists($path) {
+        return file_exists($this->path . '/' . $path);
+    }
+    function fileGetContents($path) { 
+        return file_get_contents($this->path . '/' . $path);
+    }
+    function fileOpen($path, $mode = 'r') { 
+        return fopen($this->path . '/' . $path, $mode);
+    }
+
+    // alias for setPath
+    function path($path) {
+        return $this->setPath($path);
+    }
     function setPath($path) {
         $this->path = $path;
+        // could be a directory, could be a file.
+        if (!file_exists($path)) {
+            throw new \Exception(__METHOD__ . ' path does not exist: `'.$this->path.'`');
+        }
+        $this->resolveLayer($path);
+    }
+
+    function getPath($x = null) {
+        return $this->path . ($x ? "/$x" : '');
     }
 
     function setBaseUrl($baseUrl) {
         $this->baseUrl = $baseUrl;
     }
 
-    function setLayers($layers) {
-        $this->layers = $layers;
+    protected $downloads = [];
+    function downloads($prefix, $directory): self { 
+        $this->downloads[$prefix] = realpath($directory);
+        return $this;
+    }
+
+    // Voor het publiek.
+    function layer($layer) { 
+        $this->resolveLayer($layer);
+    }
+    /**
+     * Resolve the layer and its dependencies.
+     * @fixme - deze wordt nogal een aantal keer aangeroepen waardoor shit dubbel komt.
+     */
+    function resolveLayer($layer, &$stack = []): string { 
+        //echo "RESOLVE LAYER $layer<br>";
+
+        if (is_array($layer)) { 
+            foreach ($layer as $l) { 
+                $this->resolveLayer($l, $stack);
+            }
+
+            // return the last layer.
+            return $l;
+        }
+
+        try { 
+            $layer = Utils::resolveLayerDirectory($layer);
+        } catch (\Exception $e) { 
+            if (is_dir($this->path . '/_layers/' . $layer)) {
+                $layer = realpath($this->path . '/_layers/' . $layer);
+            } else {
+                throw $e;
+            }
+        }
+
+        if (file_exists("$layer/package.json")) { 
+            $json = json_decode(file_get_contents("$layer/package.json"),1);
+            foreach ($json['layers'] ?? [] as $l) { 
+                $this->resolveLayer($l, $stack);
+            }
+        }
+
+        if (!in_array($layer, $stack)) { 
+        $stack[] = $layer;
+        }
+        $this->layers[basename($layer)] = $layer;
+        if (file_exists($layer.'/layout.php')) { 
+            $file = realpath($layer.'/layout.php');
+            $this->layouts[$file] = function ($content) use ($file) { 
+                include($file);
+            };
+        }
+        return $layer;
     }
 
     function getLayers() {
         // Either return the pre-set layers or glob the _layers/ directory.
-        if (isset($this->layers)) {
-            return $this->layers;
-        } else {
-            $dir = is_file($this->path) ? dirname($this->path) : $this->path;
-
-            return glob("$dir/_layers/**", GLOB_ONLYDIR);
-        }
+        return array_values($this->layers);
     }
 
-    function runFile($file) {
+    public $cache;
+
+    protected function runForContent(Closure $callback, $content = null) {
+        ob_start();
+        $result = $callback($content);
+        $obcontent = ob_get_clean();
+
+        if ($result && strlen($result)>2 && !$obcontent) { 
+            return $result;
+        } else {
+            return $obcontent;
+        }
+    }
+    protected function runFile($file) {
         // Make the bridge function available to our
         // subject scripts.
-        require_once __DIR__ . '/define-bridge-fn.php';
-        
-        // Start session it hasn't been started already.
-        if (session_status() == PHP_SESSION_NONE) {
-            session_start();
-        }    
-    
+
+        // This is necessary for global functions bridge/anon to work.
+        global $applet;
+                
         // Bootstrap all layers (including current)
         $cwd = is_file($this->path) ? dirname($this->path) : $this->path;
 
-        $directories = array_merge([$cwd, dirname($file)], $this->getLayers());
+        $directories = array_unique(array_merge([$cwd, dirname($file)], $this->getLayers()));
     
-        foreach ($directories as $d) {
-            if (file_exists("$d/vendor/autoload.php")) {
-                require_once "$d/vendor/autoload.php";
-            }
-            if (file_exists("$d/autoload.php")) {
-                require_once "$d/autoload.php";
-            }
-            set_include_path(get_include_path() . PATH_SEPARATOR . $d);
-        }
-    
-        // Run the requested file.
-        ob_start();
-        include($file);
-        $content = ob_get_clean();
         
-        // Listen to the --class option
-        if (!Bridge::last() && isset($_ENV['PHPBRIDGE_CLASS'])) {
-            bridge($_ENV['PHPBRIDGE_CLASS'])->interrupt();
+
+        $applet = new AppletExecutionContext($file, $this);
+        foreach ($this->getLayers() as $layer) { 
+            $applet->layer($layer);
         }
-    
-        // Decorate with layout
+
+        $content = $applet();
+        
+        // Voorkom dat we dubbelen hebben.
+        $directories = array_values(array_filter(array_unique(array_map('realpath', explode(PATH_SEPARATOR, get_include_path())))));
+
+        $bridge = null;
         foreach ($directories as $l) {
-            $file = "$l/layout.php";
-            if (file_exists($file)) {
-                
-                ob_start();
-                include($file);
-                $content = ob_get_clean();
-                break;
+            $file = "$l/bridge.php";
+            if (!file_exists($file)) { 
+                continue;
             }
-        } 
-    
-        // Inject the api bridge if it hasn't been done before.
-        if (Bridge::last() && !Bridge::last()->outputted()) { 
-            if (strpos($content, '<head')) {
-                $content = Utils::inject('head', Bridge::last()->output('script'), $content);
-            } else {
-                $content = Bridge::last()->output('script') . "\n" . $content;
+            $tmp = include($file);
+            if (!is_object($tmp)) { 
+                continue;
+            }
+                
+            $bridge = $tmp;
+        }
+
+        if (!isset($bridge)) { 
+            error_log('No bridge, using none-bridge');
+            $bridge = include(__DIR__.'/../../layers/none/bridge.php');
+        }
+
+        $bridge->setContext($applet);
+
+        if ($bridge && $_SERVER['REQUEST_METHOD'] === 'POST') { 
+            if (true === $bridge->dispatch(fopen('php://input','r'))) {
+                exit;
             }
         }
 
+        // Write this data, so we can serve appropriately on subsequent requests.
+        $this->cache = [
+            'layers' => $this->layers,
+            'downloads' => $this->downloads
+        ];
+
+        foreach ($this->layouts as $layoutFn) {
+            $content = $this->runForContent($layoutFn, $content);
+        }
+
+        if (!$bridge->hasOutputted()) { 
+            error_log('No bridge output, using none-layout');
+            ob_start();
+            include(__DIR__ . '/../../layers/none/layout.php');
+            $content = ob_get_clean();
+        }
+    
         if ($this->baseUrl) {
             $content = Utils::inject('head', '<base href="'.rtrim($this->baseUrl,'/').'/">', $content);
         }
     
         // Output the content.
-        echo $content;
-    
+        echo $content;    
     }
     
+    protected $layouts = [];
+    function layout(\Closure $layout) {
+        $this->layouts[] = $layout;
+    }
+
     function dispatch($url = null) {
-        $url = $_SERVER['REQUEST_URI'];
+        $url ??= $_SERVER['REQUEST_URI'];
 
         if ($this->baseUrl) {
             // Use case:
@@ -146,35 +260,50 @@ class Server {
                 if (in_array($extension, $handleExtensions)) {
                     $this->runFile($pathDir . '/' . $url);
                     return true;
-                } else {
-                    // let php handle this.
-                    $this->serveFile($pathDir . '/'. $url);
-                    return false;
-                }
+                } 
             }
         }
         
-        $layers = $this->getLayers();
+        //// HET SERVEER STUK 
+
+        foreach ($this->cache['downloads'] ?? [] as $prefix => $downloadDir) { 
+            $prefix = '/'.trim($prefix,'/').'/';
+            $url = '/' . ltrim($url, '/');
+
+            if (strpos($url, $prefix) === 0) {
+                $requestedDownload = $downloadDir .'/' . urldecode(substr($url, strlen($prefix)));
+                if (is_file($requestedDownload)) { 
+                    return $this->serveFile($requestedDownload);
+                } 
+                return;
+            }
+        }
+        $layers = array_values(array_filter(array_unique(array_map('realpath', array_merge($this->layers, $this->cache['layers'] ?? [])))));
+        
         // Laatste kans:
-        foreach ($layers as $l) {             
+        foreach ($layers as $l) {  
             if (file_exists($l . '/' . $url)) {
                 $this->serveFile($l .'/' . $url);
             } 
         }
 
+        // @fixme - beter een throw doen.
         header('HTTP/1.1 404 Not Found');
-        echo "The requested file was not found.";
+        echo "1. The requested path `$url` was not found.";
         exit(1);
     }
 
     function serveFile($file) {
         // deny to dotfiles and directory
         if (preg_match('~/\.~', $file) || substr($file, 0, 1) === '.') {
+            // @todo - dotfiles en shit moet nog getest worden
             header('HTTP/1.1 404 Not Found');
             header('Content-Type: text/plain');
-            echo "Request page was not found.";
+            echo "2. Requested path `$url` was not found.";
             exit(1);
         }
+
+        // @fixme - beter een throw doen.
 
         $ext = pathinfo($file, PATHINFO_EXTENSION);
         

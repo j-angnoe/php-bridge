@@ -1,6 +1,6 @@
 {
   "name": "php-bridge",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "PHP Javascript Bridge",
   "main": "index.js",
   "directories": {
@@ -10,9 +10,6 @@
     "phpbridge": "./cli/phpbridge"
   },
   "scripts": {
-    "start": "php -S localhost:10291 -t examples/",
-    "start:test-cli": "./cli/phpbridge -f examples/cli/test-file.php --no-browser --port=31890",
-    "start:test-cli2": "./cli/phpbridge -f examples/cli/ --no-browser --port=31891",
     "test": "cypress run",
     "cypress": "cypress open -P ."
   },
