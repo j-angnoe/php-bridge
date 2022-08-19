@@ -17,6 +17,7 @@ return new class extends BaseBridge {
                 }).then(response => {
                     var contentType = response.headers.get('content-type');
                     if (contentType.match(/application\/json/)) { 
+                        contentBeforeJson = '';
                         return response.text().then(text => {
                             while(true) {
                                 try { 
@@ -28,12 +29,18 @@ return new class extends BaseBridge {
                                         if (nextNewline === -1) {
                                             throw e;
                                         } else {
-                                            console.error('Encountered content BEFORE json:'+"\n", text.substr(0,nextNewline));
+                                            contentBeforeJson += text.substr(0,nextNewline + 1);
                                             text = text.substr(nextNewline + 1);
                                         }
                                     }                                    
                                 }
                             }
+                        }).finally(result => {
+                            if (contentBeforeJson) {
+                                console.error("Encountered content BEFORE json");
+                                console.info(contentBeforeJson);
+                            }
+                            return result;
                         })
                     } else {
                         return response.text();

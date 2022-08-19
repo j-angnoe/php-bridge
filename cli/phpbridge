@@ -5,10 +5,12 @@ require_once __DIR__ . '/autoload.php';
 
 function openInBrowser($url, $options = []) { 
     // @fixme - browserOpts is ignored.
+    // dont forget to call this in background.
     if (isset($_ENV['BROWSER'])) { 
-        system($_ENV['BROWSER'] . " $url");
+        system($_ENV['BROWSER'] . " $url &");
     } else { 
-        system("firefox $url || chromium $url || chrome $url || xdg-open $url || open $url");
+        
+        system("(firefox $url || chromium $url || chrome $url || xdg-open $url || open $url) &");
     }
 }
 
@@ -51,7 +53,6 @@ function start_webserver ($path = '.', $opts = []) {
         $processes = read_json("/tmp/phpbridge/processes.json");
 
         foreach ($processes as $index => $p) {
-
             if (($p['args'] ?? []) === [$path, $opts]) {
                 if (file_exists("/proc/" . $p['pid'])) {
                     $port = $p['port'];
@@ -69,6 +70,7 @@ function start_webserver ($path = '.', $opts = []) {
     }
 
     $getPortProcess = function ($port) {
+        // @fixme - MAC support.
         $line = trim(`fuser $port/tcp 2>/dev/null`);
         return $line;
     };
@@ -187,6 +189,7 @@ function start_webserver ($path = '.', $opts = []) {
         @mkdir($env['PHPBRIDGE_SESSION'], 0777, true);
     }
 
+    $env['OLDPWD'] = getcwd();
     chdir($dir);
     $descriptors = [['pipe','r'],['pipe','w'], ['pipe','w']];
 
@@ -419,6 +422,7 @@ $opts = getopt("f:l:p:", [
     'debug',
     'no-browser',
     'help',
+    'cwd:',
     'env:'
 ]);
 

@@ -1,6 +1,7 @@
 <?php
 
 namespace PhpBridge;
+use Closure;
 
 class AppletExecutionContext {
     protected $file;
@@ -21,14 +22,18 @@ class AppletExecutionContext {
         $dependentLayers = [];
         $this->server->resolveLayer($name, $dependentLayers);
         
+        // print_r($dependentLayers);
         foreach ($dependentLayers as $layer) { 
-            error_log('loading dep layer ' . $layer . ' for ' . $name);
+            // error_log('loading dep layer ' . $layer . ' for ' . $name);
             $this->layers[] = $layer;
             if (file_exists("$layer/vendor/autoload.php")) {
                 require_once "$layer/vendor/autoload.php";
             }
             if (file_exists("$layer/autoload.php")) {
                 require_once "$layer/autoload.php";
+            }
+            if (file_exists("$layer/bootstrap.php")) {
+                require_once "$layer/bootstrap.php";
             }
 
             // @fixme - even de order nalopen.

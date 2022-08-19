@@ -3,7 +3,8 @@
 namespace PhpBridge;
 
 use JsonSerializable;
-use Iterator;
+use Closure;
+use Traversable;
 
 class JsonSerializableDispatchResult implements JsonSerializable {
     private $result;
@@ -14,24 +15,28 @@ class JsonSerializableDispatchResult implements JsonSerializable {
     function jsonSerialize() {
         $result = $this->result;
         if (is_array($result)) { 
-            foreach ($result as $key=>$value) {
-                if ($value instanceof \Closure) {
-                    $result[$key] = $value = $value();
-                } 
-                
-                if (is_array($value)) {
-                    $result[$key] = new JsonSerializableArray($value);
-                    $keys = array_keys($value);
-                    $isNumeric = true;
-                    for($i=0;$i<log(count($keys)) && $isNumeric;$i++){
-                        $isNumeric = $isNumeric && is_numeric($keys[$i]);
-                    }
-                } else if (is_iterable($value)) {
-                    $result[$key] = new JsonSerializableIterator($value);
+            $result = array_map(function($value) { 
+                if ($value instanceof Closure) {
+                    return new JsonSerializableClosureResult($value);
                 }
-            }
+
+                if (is_array($value)) {
+                    return new JsonSerializableArray($value);
+                } 
+                if ($value instanceof JsonSerializable) {
+                    return $value;
+                }
+                
+                if ($value instanceof Traversable) {
+                    return new JsonSerializableIterator($value);
+                }
+                return $value;
+            }, $result);
+
             $result = new JsonSerializableArray($result);
-        } else if (is_iterable($result)) {
+        } else if ($result instanceof JsonSerializable) {
+            return $result;
+        } else if ($result instanceof Traversable) {
             $result = new JsonSerializableIterator($result);
         } 
         return $result;
@@ -40,7 +45,7 @@ class JsonSerializableDispatchResult implements JsonSerializable {
 
 class JsonSerializableIterator implements JsonSerializable {
     private $iterator;
-    function __construct(Iterator $iterator) {
+    function __construct(Traversable $iterator) {
         $this->iterator = $iterator;
     }
 
@@ -75,5 +80,17 @@ class JsonSerializableArray implements JsonSerializable {
             next($this->array);
         }
         return array_values($this->array);
+    }
+}
+
+
+class JsonSerializableClosureResult implements JsonSerializable {
+    private $closure;
+    function __construct(Closure $closure) {
+        $this->closure = $closure;
+    }
+
+    function jsonSerialize() {
+        return new JsonSerializableDispatchResult(call_user_func($this->closure));
     }
 }

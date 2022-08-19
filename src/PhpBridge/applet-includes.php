@@ -33,7 +33,7 @@ if (!function_exists('anon')) {
         $filename = $refl->getFileName();
         $PHPBRIDGE_ANONS[$filename] ??= 0;
         $PHPBRIDGE_ANONS[$filename]++;
-        $anonName = '__bridge_anons.'.'a'.substr(sha1($filename.' '.($_SERVER['REQUEST_URI']??'(someuri)').' '.($_SERVER['HTTP_USER_AGENT']??'(someagent)')), 16, 8);
+        $anonName = '__bridge_anons.'.'a'.substr(sha1($filename.sha1(' anon #' . $PHPBRIDGE_ANONS[$filename]) .($_SERVER['REQUEST_URI']??'(someuri)').' '.($_SERVER['HTTP_USER_AGENT']??'(someagent)')), 16, 8);
         call_user_func_array([$applet,'bridge'], [$anonName, $function]);
 
         return $anonName;
@@ -59,8 +59,17 @@ if (!function_exists('iterator_map')) {
         return new IteratorStop;
     }
 
-    function iterator_map(\Closure $closure, Traversable $tr) { 
-        foreach ($tr as $key=>$value) {
+    /**
+     * @params Closure $closure
+     * @params iterable $iterator
+     * 
+     * These params may be swapped.
+     */
+    function iterator_map($closure, $iterator) { 
+        if (is_iterable($closure) && $iterator instanceof \Closure) {
+            list($iterator,$closure) = [$closure,$iterator];
+        }
+        foreach ($iterator as $key=>$value) {
             $result = $closure($value, $key);
             if ($result instanceof IteratorSkip) {
                 continue;
@@ -68,7 +77,62 @@ if (!function_exists('iterator_map')) {
             if ($result instanceof IteratorStop) {
                 break;
             }
-            yield $result;
+            yield $key=>$result;
         }
+    }
+
+    function iterator_filter(\Closure $closure, iterable $iterator) {
+        if (is_iterable($closure) && $iterator instanceof \Closure) {
+            list($iterator,$closure) = [$closure,$iterator];
+        }
+        foreach ($iterator as $key=>$value) {
+            $result = $closure($value, $key);
+            if (!$result) {
+                continue;
+            }
+            if ($result instanceof IteratorSkip) {
+                continue;
+            }
+            if ($result instanceof IteratorStop) {
+                break;
+            }
+            yield $key=>$value;
+        }
+    }
+
+    function iterator_limit($limit, $iterator, &$count = null) {
+        if (!is_iterable($iterator) && !is_a($iterator, Closure::class)) {
+            throw new \InvalidArgumentException('Argument to '. __FUNCTION__ .' must be iterable or Closure');
+        }
+        if (is_a($iterator, Closure::class)) {
+            $iterator = $iterator();
+        }
+        $count = 0;
+        $limit = max(0,$limit);
+        foreach ($iterator as $key=>$value) {
+            $limit--;
+            if ($limit < 0) return;
+
+            $count++;
+            yield $key=>$value;
+        }
+    }
+}
+
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle) {
+        return strpos($haystack, $needle) === 0;
+    }
+}
+
+if (!function_exists('str_contains')) {
+    function str_contains($haystack, $needle) {
+        return strpos($haystack, $needle) !== false;
+    }
+}
+
+if (!function_exists('str_ends_with')) {
+    function str_ends_with($haystack, $needle) {
+        return strpos(strrev($haystack), strrev($needle)) === 0;
     }
 }

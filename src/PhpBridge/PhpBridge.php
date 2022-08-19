@@ -54,7 +54,24 @@ class PhpBridge {
         return $setupFunction;
     }
 
+    static protected $registeredMounts = [];
+
     static function mount($baseUrl, $appletPath, $setupFunction = null) {
+        foreach (static::$registeredMounts as $registered) {
+            if (strpos($baseUrl, $registered) === 0) {
+                throw new \Exception(sprintf(
+                    "%s: Error mounting %s".
+                    "\nThis app will be blocked by an earlier registered applet at  %s".
+                    "\nTo fix this, please make sure this applet is registered earlier than %s",
+                    __METHOD__,
+                    $baseUrl, 
+                    $registered,
+                    $registered
+                ));
+            }
+        }
+        static::$registeredMounts[] = $baseUrl;
+
         $uri = '/' . ltrim($_SERVER['REQUEST_URI'],'/');
         $baseUrl = '/' . ltrim($baseUrl, '/');
 

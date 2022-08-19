@@ -179,7 +179,11 @@ Even een nieuwe app opzetten:
 <hr>
 <?= $content ?>
 ```
-
+```json export=appje/apps/vueblocks2/package.json
+{
+	"layers" : []
+}
+```
 ```php append=app_router_other_cases
 	case '/apps/vueblocks2';
 		$server = new PhpBridge\Server('appje/apps/vueblocks2/','/apps/vueblocks2');
@@ -290,3 +294,65 @@ iframe('http://localhost:9995/apps/anons/vue-harness')
 	$this->see('my_anon was called');
 })
 ```
+
+# Nieuwe dispatch mogelijkheden
+```php append=server_mounts
+PhpBridge::mount('/apps/dispatcher','appje/dispatch.php');
+```
+```php export=appje/dispatch.php
+<script>
+var anon = <?= anon(function () {	
+	return [
+		// Dit wordt een JSON object.
+		'associative_array' => [
+			'x' => 1,
+			2 => 2,
+			3 => 3,
+			4 => 4
+		],
+		// Het resultaat van array_filter moet gewoon in JSON
+		// als een array aankomen.
+		'real_array' => array_filter([1,2,3,4], function($a) {
+			return $a % 2;
+		}),
+		
+		// Een iterator wordt naar array geonverteerd.
+		'iterator' => new ArrayIterator([1,2,3,4]),
+		
+		// Een generator functie wordt uitgevoerd.
+		'generator' => function() {
+			for($i=0;$i<5;$i++){
+				yield $i;
+			}
+		},
+		// Iterator_map returned een iterator 
+		'iterator_map' => iterator_map(function($a) {
+			if ($a%2) { 
+				return $a;
+			} else {
+				return iterator_skip();
+			}
+		}, new ArrayIterator([1,2,3,4])),
+		
+		// Met iterator_limit kunnen we lazily deze oneindige
+		// functie uitvoeren en 10 resultaten pakken.
+		'infinite_array' => iterator_limit(10, function ($i=0) {
+			while(true) {
+				yield $i++;
+			}
+		})
+	];
+})?>;
+anon().then(data => {
+	document.body.innerHTML += '<pre>' + JSON.stringify(data,null,3) + '</pre>';
+});
+</script>
+```
+```sh++ 
+iframe('http://localhost:9995/apps/dispatcher')
+| assert({
+	# Beetje lazy, maar als je beeld hebt zal het wel goed zijn.
+	$this->see('iterator');
+})
+```
+

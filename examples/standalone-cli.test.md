@@ -55,9 +55,7 @@ cat '__DATA__/index.php'
 	$this->contains('sum =');
 })
 ```
-```sh++
-echo __DATA__
-```
+
 Open phpbridge in `directory` modus:
 ```sh++
 ./cli/phpbridge -f __DATA__ -p 9999

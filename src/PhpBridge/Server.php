@@ -114,8 +114,18 @@ class Server {
         }
 
         if (!in_array($layer, $stack)) { 
-        $stack[] = $layer;
+            $stack[] = $layer;
         }
+
+        // Wacht nog even: 
+        // if (file_exists("$layer/vendor/autoload.php")) { 
+        //     require_once "$layer/vendor/autoload.php";
+        // }
+        
+        // if (file_exists("$layer/autoload.php")) { 
+        //     require_once "$layer/autoload.php";
+        // }
+        
         $this->layers[basename($layer)] = $layer;
         if (file_exists($layer.'/layout.php')) { 
             $file = realpath($layer.'/layout.php');
@@ -150,21 +160,22 @@ class Server {
 
         // This is necessary for global functions bridge/anon to work.
         global $applet;
-                
+        
         // Bootstrap all layers (including current)
         $cwd = is_file($this->path) ? dirname($this->path) : $this->path;
 
         $directories = array_unique(array_merge([$cwd, dirname($file)], $this->getLayers()));
     
-        
-
         $applet = new AppletExecutionContext($file, $this);
         foreach ($this->getLayers() as $layer) { 
             $applet->layer($layer);
         }
 
+        $restoreCwd = getcwd();
+
         $content = $applet();
         
+
         // Voorkom dat we dubbelen hebben.
         $directories = array_values(array_filter(array_unique(array_map('realpath', explode(PATH_SEPARATOR, get_include_path())))));
 
@@ -194,6 +205,8 @@ class Server {
                 exit;
             }
         }
+
+        chdir($restoreCwd);
 
         // Write this data, so we can serve appropriately on subsequent requests.
         $this->cache = [
@@ -233,7 +246,13 @@ class Server {
             // /htools/vue-conv should work, but /htools/vue-conv/ should also work.
             $url = preg_replace($x='~^' . preg_quote($this->baseUrl).'~', '', $url, 1);
         }
+        
+        $this->resolveLayer($this->path);
 
+        if (is_file($this->path.'/router.php')) {
+            include($this->path.'/router.php');
+        }      
+        
         // url can also contain a query-string, we should strip this out.
         $url = parse_url($url, PHP_URL_PATH);
         
@@ -253,8 +272,8 @@ class Server {
             $tryUrls = [$url];
         }
         
+        
         foreach ($tryUrls as $url) {
-
             if (file_exists($pathDir . '/' . $url)) {
                 $extension = pathinfo($url, PATHINFO_EXTENSION);
                 if (in_array($extension, $handleExtensions)) {
@@ -278,6 +297,7 @@ class Server {
                 return;
             }
         }
+
         $layers = array_values(array_filter(array_unique(array_map('realpath', array_merge($this->layers, $this->cache['layers'] ?? [])))));
         
         // Laatste kans:
